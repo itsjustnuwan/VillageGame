@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import GameUI from './GameUI';
 import { GameController } from '../game/gameController';
+import { BuildingType } from '../game/player';
 
 const Game: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -13,6 +14,8 @@ const Game: React.FC = () => {
     dayCycle: 'day',
     waveNumber: 0,
     buildMode: false,
+    coins: 50,
+    selectedBuilding: null as BuildingType | null
   });
 
   // Initialize game when component mounts
@@ -26,14 +29,18 @@ const Game: React.FC = () => {
     const intervalId = setInterval(() => {
       if (controller) {
         const dayCycleInfo = controller['engine']['getDayCycleInfo']();
+        const player = controller['player'];
+        const selectedBuilding = player.getSelectedBuilding();
         
         setGameStats({
           villageHealth: controller['engine']['getVillageHealth'](),
-          playerHealth: controller['player'].health,
-          currentWeapon: controller['player'].getCurrentWeapon().name,
+          playerHealth: player.health,
+          currentWeapon: player.getCurrentWeapon().name,
           dayCycle: dayCycleInfo.cycle,
           waveNumber: controller['waveNumber'],
           buildMode: controller['buildMode'],
+          coins: player.coins,
+          selectedBuilding: controller['buildMode'] ? selectedBuilding : null
         });
       }
     }, 500);
@@ -63,11 +70,13 @@ const Game: React.FC = () => {
           dayCycle={gameStats.dayCycle as 'day' | 'night'}
           waveNumber={gameStats.waveNumber}
           buildMode={gameStats.buildMode}
+          coins={gameStats.coins}
+          selectedBuilding={gameStats.selectedBuilding}
           onStartGame={handleStartGame}
         />
       </div>
       <div className="absolute bottom-2 left-0 right-0 text-center text-gray-400 text-xs">
-        WASD to move • SPACE to attack • E to switch weapons • B for build mode • 1,2 to select building type
+        WASD to move • SPACE to attack • E to switch weapons • B for build mode • Q/R to select building
       </div>
     </div>
   );

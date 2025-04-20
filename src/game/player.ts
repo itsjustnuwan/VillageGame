@@ -1,5 +1,17 @@
 
-import { GameObject, Weapon } from "./engine";
+import { GameObject, Weapon, Building } from "./engine";
+
+export type BuildingType = {
+  id: string;
+  name: string;
+  cost: number;
+  type: string;
+  defense?: number;
+  health: number;
+  description: string;
+};
+
+export type InventoryItem = BuildingType | Weapon;
 
 export class Player implements GameObject {
   id: string;
@@ -15,6 +27,11 @@ export class Player implements GameObject {
   isAttacking: boolean;
   attackCooldown: number;
   health: number;
+  maxHealth: number;
+  coins: number;
+  inventory: InventoryItem[];
+  buildings: BuildingType[];
+  selectedBuildingIndex: number;
   
   constructor(x: number, y: number) {
     this.id = 'player';
@@ -33,6 +50,50 @@ export class Player implements GameObject {
     this.isAttacking = false;
     this.attackCooldown = 0;
     this.health = 100;
+    this.maxHealth = 100;
+    this.coins = 50; // Starting coins
+    
+    // Define available buildings
+    this.buildings = [
+      { 
+        id: 'defense-tower', 
+        name: 'Defense Tower', 
+        cost: 25,
+        type: 'defense',
+        defense: 10,
+        health: 100,
+        description: 'Attacks nearby enemies automatically'
+      },
+      { 
+        id: 'resource-building', 
+        name: 'Resource Building', 
+        cost: 40,
+        type: 'resource',
+        health: 80,
+        description: 'Generates coins over time'
+      },
+      { 
+        id: 'wall', 
+        name: 'Wall', 
+        cost: 15,
+        type: 'defense',
+        defense: 5,
+        health: 150,
+        description: 'Blocks enemy path'
+      },
+      { 
+        id: 'guard-post', 
+        name: 'Guard Post', 
+        cost: 60,
+        type: 'defense',
+        defense: 15,
+        health: 120,
+        description: 'Spawns guards to help defend'
+      }
+    ];
+
+    this.inventory = [...this.weapons, ...this.buildings];
+    this.selectedBuildingIndex = 0;
   }
 
   update(delta: number) {
@@ -90,7 +151,7 @@ export class Player implements GameObject {
     ctx.fillRect(this.x, this.y - 15, this.width, 5);
     
     ctx.fillStyle = this.health > 50 ? '#4CAF50' : this.health > 25 ? '#FFC107' : '#F44336';
-    ctx.fillRect(this.x, this.y - 15, this.width * (this.health / 100), 5);
+    ctx.fillRect(this.x, this.y - 15, this.width * (this.health / this.maxHealth), 5);
   }
   
   moveLeft(delta: number) {
@@ -125,7 +186,41 @@ export class Player implements GameObject {
     return this.health <= 0;
   }
   
+  heal(amount: number) {
+    this.health = Math.min(this.maxHealth, this.health + amount);
+  }
+  
   getCurrentWeapon() {
     return this.weapons[this.currentWeapon];
+  }
+  
+  addCoins(amount: number) {
+    this.coins += amount;
+  }
+  
+  useCoins(amount: number): boolean {
+    if (this.coins >= amount) {
+      this.coins -= amount;
+      return true;
+    }
+    return false;
+  }
+  
+  getSelectedBuilding(): BuildingType {
+    return this.buildings[this.selectedBuildingIndex];
+  }
+  
+  nextBuilding() {
+    this.selectedBuildingIndex = (this.selectedBuildingIndex + 1) % this.buildings.length;
+    return this.getSelectedBuilding();
+  }
+  
+  previousBuilding() {
+    this.selectedBuildingIndex = (this.selectedBuildingIndex - 1 + this.buildings.length) % this.buildings.length;
+    return this.getSelectedBuilding();
+  }
+  
+  canAffordCurrentBuilding(): boolean {
+    return this.coins >= this.getSelectedBuilding().cost;
   }
 }

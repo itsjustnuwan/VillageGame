@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Sword, Shield, Sun, Moon } from 'lucide-react';
+import { Sword, Shield, Sun, Moon, Coins, Building, Ghost } from 'lucide-react';
+import { BuildingType } from '@/game/player';
 
 interface GameUIProps {
   villageHealth: number;
@@ -10,6 +11,8 @@ interface GameUIProps {
   dayCycle: 'day' | 'night';
   waveNumber: number;
   buildMode: boolean;
+  coins: number;
+  selectedBuilding: BuildingType | null;
   onStartGame: () => void;
 }
 
@@ -20,6 +23,8 @@ const GameUI: React.FC<Partial<GameUIProps>> = ({
   dayCycle = 'day',
   waveNumber = 0,
   buildMode = false,
+  coins = 0,
+  selectedBuilding = null,
   onStartGame
 }) => {
   const [isStarted, setIsStarted] = useState(false);
@@ -45,7 +50,8 @@ const GameUI: React.FC<Partial<GameUIProps>> = ({
               <li className="mb-2">• <span className="font-bold">SPACE</span> - Attack</li>
               <li className="mb-2">• <span className="font-bold">E</span> - Switch weapon</li>
               <li className="mb-2">• <span className="font-bold">B</span> - Toggle build mode</li>
-              <li className="mb-2">• <span className="font-bold">1,2</span> - Select building type</li>
+              <li className="mb-2">• <span className="font-bold">Q/R</span> - Select building type</li>
+              <li className="mb-2">• <span className="font-bold">H</span> - Heal (20 coins)</li>
             </ul>
             <Button onClick={handleStart} className="bg-pixel-green hover:bg-pixel-green/80 text-white">
               Start Game
@@ -67,6 +73,10 @@ const GameUI: React.FC<Partial<GameUIProps>> = ({
                   <Moon className="h-5 w-5 text-blue-300 mr-1" />
                 )}
                 <span className="capitalize">{dayCycle}</span>
+              </div>
+              <div className="flex items-center ml-3">
+                <Coins className="h-5 w-5 text-yellow-400 mr-1" />
+                <span className="font-semibold">{coins}</span>
               </div>
               {waveNumber > 0 && (
                 <div className="ml-4 bg-red-500/70 px-2 py-1 rounded-md text-xs font-bold animate-pulse-pixel">
@@ -107,6 +117,44 @@ const GameUI: React.FC<Partial<GameUIProps>> = ({
                 ></div>
               </div>
             </div>
+          </div>
+          
+          {/* Building Selection (when in build mode) */}
+          {buildMode && selectedBuilding && (
+            <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 bg-black/70 text-white p-3 rounded-md">
+              <div className="text-center font-bold mb-1">{selectedBuilding.name}</div>
+              <div className="flex items-center justify-center mb-1">
+                <Coins className="h-4 w-4 text-yellow-400 mr-1" />
+                <span className={coins >= selectedBuilding.cost ? "text-green-400" : "text-red-400"}>
+                  {selectedBuilding.cost}
+                </span>
+              </div>
+              <div className="text-xs text-center opacity-80">{selectedBuilding.description}</div>
+              <div className="text-xs text-center mt-1">Press Q/R to change building</div>
+            </div>
+          )}
+
+          {/* Inventory Quickbar */}
+          <div className="absolute bottom-16 left-0 right-0 flex justify-center">
+            <div className="bg-black/50 border border-gray-700 rounded-md p-1 flex gap-1">
+              <div className="bg-gray-800/80 p-1 rounded border border-gray-600 flex items-center justify-center w-12 h-12">
+                <Sword className="h-8 w-8 text-gray-300" />
+              </div>
+              <div className="bg-gray-900/80 p-1 rounded border border-gray-700 flex items-center justify-center w-12 h-12">
+                <Shield className="h-8 w-8 text-gray-400" />
+              </div>
+              <div className="bg-gray-900/80 p-1 rounded border border-gray-700 flex items-center justify-center w-12 h-12">
+                <Building className="h-8 w-8 text-blue-300" />
+              </div>
+              <div className="bg-gray-900/80 p-1 rounded border border-gray-700 flex items-center justify-center w-12 h-12">
+                <Ghost className="h-8 w-8 text-purple-300" />
+              </div>
+            </div>
+          </div>
+
+          {/* Controls Reminder */}
+          <div className="absolute top-12 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/30 px-3 py-1 rounded-full">
+            Press H to heal (20 coins)
           </div>
         </>
       )}

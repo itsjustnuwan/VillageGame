@@ -1,6 +1,6 @@
 
-import { GameEngine, Building } from './engine';
-import { Player } from './player';
+import { GameEngine, Building, Guard } from './engine';
+import { Player, BuildingType } from './player';
 import { Enemy } from './enemy';
 import { toast } from 'sonner';
 
@@ -10,10 +10,11 @@ export class GameController {
   private keysPressed: Set<string> = new Set();
   private mousePosition: { x: number, y: number } = { x: 0, y: 0 };
   private enemies: Enemy[] = [];
+  private guards: Guard[] = [];
   private waveNumber: number = 0;
   private buildMode: boolean = false;
-  private selectedBuildingType: string = 'defense';
   private gameOver: boolean = false;
+  private resourceTimer: number = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.engine = new GameEngine(canvas);
@@ -23,21 +24,7 @@ export class GameController {
     this.engine.addGameObject(this.player);
     
     this.setupEventListeners(canvas);
-    
-    // Create initial buildings (village center)
-    const villageCenter: Building = {
-      id: 'village-center',
-      name: 'Village Center',
-      health: 200,
-      defense: 0,
-      type: 'main',
-      x: canvas.width / 2 - 50,
-      y: canvas.height / 2 + 100,
-      width: 100,
-      height: 80
-    };
-    
-    this.engine.addBuilding(villageCenter);
+    this.setupResourceGeneration();
   }
 
   public start() {
@@ -50,6 +37,15 @@ export class GameController {
 
   public stop() {
     this.engine.stop();
+  }
+  
+  private setupResourceGeneration() {
+    document.addEventListener('resource-generated', (e: any) => {
+      const buildingId = e.detail.buildingId;
+      // Add coins for the player
+      this.player.addCoins(5);
+      toast(`+5 coins generated from resource building`);
+    });
   }
   
   private setupEventListeners(canvas: HTMLCanvasElement) {
@@ -77,18 +73,28 @@ export class GameController {
           this.buildMode = !this.buildMode;
           toast(this.buildMode ? 'Build Mode: ON' : 'Build Mode: OFF');
           break;
-        case '1':
-          // Select defense building
+        case 'q':
+          // Previous building selection
           if (this.buildMode) {
-            this.selectedBuildingType = 'defense';
-            toast('Selected: Defense Tower');
+            const building = this.player.previousBuilding();
+            toast(`Selected: ${building.name} (${building.cost} coins)`);
           }
           break;
-        case '2':
-          // Select resource building
+        case 'r':
+          // Next building selection
           if (this.buildMode) {
-            this.selectedBuildingType = 'resource';
-            toast('Selected: Resource Building');
+            const building = this.player.nextBuilding();
+            toast(`Selected: ${building.name} (${building.cost} coins)`);
+          }
+          break;
+        case 'h':
+          // Heal player (if they have enough coins)
+          if (this.player.coins >= 20) {
+            this.player.useCoins(20);
+            this.player.heal(25);
+            toast('Healed 25 health for 20 coins');
+          } else {
+            toast('Not enough coins to heal');
           }
           break;
       }
@@ -113,22 +119,74 @@ export class GameController {
   }
   
   private placeBuilding() {
+    const selectedBuilding = this.player.getSelectedBuilding();
+    
+    if (!this.player.canAffordCurrentBuilding()) {
+      toast(`Not enough coins to place ${selectedBuilding.name}`);
+      return;
+    }
+    
     const buildingSize = { width: 40, height: 40 };
+    
+    if (selectedBuilding.type === 'guard-post') {
+      buildingSize.width = 50;
+      buildingSize.height = 60;
+    }
+    
+    // Check if there's enough space to place the building
+    const buildingX = this.mousePosition.x - buildingSize.width / 2;
+    const buildingY = this.mousePosition.y - buildingSize.height / 2;
+    
+    // Check for collisions with existing buildings
+    const buildings = this.engine.getAllBuildings();
+    for (const building of buildings) {
+      if (
+        buildingX < building.x + building.width &&
+        buildingX + buildingSize.width > building.x &&
+        buildingY < building.y + building.height &&
+        buildingY + buildingSize.height > building.y
+      ) {
+        toast('Cannot place building here - overlaps with another building');
+        return;
+      }
+    }
+    
+    // Spend coins
+    this.player.useCoins(selectedBuilding.cost);
     
     const newBuilding: Building = {
       id: `building-${Date.now()}`,
-      name: this.selectedBuildingType === 'defense' ? 'Defense Tower' : 'Resource Building',
-      health: 100,
-      defense: this.selectedBuildingType === 'defense' ? 10 : 0,
-      type: this.selectedBuildingType,
-      x: this.mousePosition.x - buildingSize.width / 2,
-      y: this.mousePosition.y - buildingSize.height / 2,
+      name: selectedBuilding.name,
+      health: selectedBuilding.health,
+      defense: selectedBuilding.defense || 0,
+      type: selectedBuilding.type,
+      x: buildingX,
+      y: buildingY,
       width: buildingSize.width,
       height: buildingSize.height
     };
     
+    // If it's a resource building, add timer for generating resources
+    if (selectedBuilding.type === 'resource') {
+      newBuilding.lastAction = 0;
+      newBuilding.actionInterval = 10; // Generate resources every 10 seconds
+    }
+    
+    // If it's a guard post, spawn a guard
+    if (selectedBuilding.type === 'guard-post') {
+      setTimeout(() => {
+        const guard = new Guard(
+          newBuilding.x + newBuilding.width / 2,
+          newBuilding.y + newBuilding.height
+        );
+        this.guards.push(guard);
+        this.engine.addGameObject(guard);
+        toast('Guard spawned from guard post');
+      }, 2000);
+    }
+    
     this.engine.addBuilding(newBuilding);
-    toast(`Placed a ${newBuilding.name}`);
+    toast(`Placed a ${selectedBuilding.name} for ${selectedBuilding.cost} coins`);
   }
   
   private checkEnemyHits() {
@@ -157,6 +215,11 @@ export class GameController {
       if (this.checkCollision(attackArea, enemy)) {
         const isDead = enemy.takeDamage(weapon.damage);
         if (isDead) {
+          // Collect coins from defeated enemy
+          const coinsRewarded = enemy.getReward();
+          this.player.addCoins(coinsRewarded);
+          toast(`+${coinsRewarded} coins from defeated enemy`);
+          
           const index = this.enemies.indexOf(enemy);
           if (index !== -1) {
             this.enemies.splice(index, 1);
@@ -200,6 +263,7 @@ export class GameController {
       if (this.gameOver) return;
       
       this.updateEnemies();
+      this.updateGuards();
       this.checkVillageStatus();
     }, 1000 / 60); // 60 fps check
   }
@@ -211,8 +275,23 @@ export class GameController {
     const edge = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
     
     let x, y;
-    const types: Array<'zombie' | 'skeleton' | 'ghost'> = ['zombie', 'skeleton', 'ghost'];
-    const enemyType = types[Math.floor(Math.random() * types.length)];
+    
+    // Determine enemy type based on wave number
+    let enemyTypes: Array<'zombie' | 'skeleton' | 'ghost' | 'bat' | 'slime' | 'dragon'> = ['zombie', 'skeleton'];
+    
+    if (this.waveNumber >= 2) {
+      enemyTypes.push('ghost', 'bat');
+    }
+    
+    if (this.waveNumber >= 4) {
+      enemyTypes.push('slime');
+    }
+    
+    if (this.waveNumber >= 6) {
+      enemyTypes.push('dragon');
+    }
+    
+    const enemyType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
     
     switch (edge) {
       case 0: // Top
@@ -296,6 +375,43 @@ export class GameController {
             }
           }
           break;
+        }
+      }
+    }
+  }
+  
+  private updateGuards() {
+    // Update guards to target and attack nearby enemies
+    for (const guard of this.guards) {
+      // Find the nearest enemy within range
+      let nearestEnemy = null;
+      let shortestDistance = guard.range;
+      
+      for (const enemy of this.enemies) {
+        const dx = enemy.x - guard.x;
+        const dy = enemy.y - guard.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < shortestDistance) {
+          shortestDistance = distance;
+          nearestEnemy = enemy;
+        }
+      }
+      
+      if (nearestEnemy) {
+        guard.setTarget(nearestEnemy);
+        
+        // Attack the enemy if in range
+        const damage = guard.attack();
+        if (damage > 0) {
+          const isDead = nearestEnemy.takeDamage(damage);
+          if (isDead) {
+            const index = this.enemies.indexOf(nearestEnemy);
+            if (index !== -1) {
+              this.enemies.splice(index, 1);
+              this.engine.removeGameObject(nearestEnemy.id);
+            }
+          }
         }
       }
     }
